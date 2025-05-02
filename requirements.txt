@@ -1,4 +1,1 @@
-flask
-gunicorn
-pandas
-firebase-admin
+Flask==3.1.0gunicorn==23.0.0pandas==2.2.3firebase-admin==6.7.0numpy==2.2.4python-dateutil==2.9.0.post0tzdata==2025.2 
