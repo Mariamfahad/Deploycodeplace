@@ -67,12 +67,24 @@ class _PlaceSearchPageState extends State<PlaceSearchPage> {
                   return const Iterable<String>.empty();
                 }
 
-                final filteredPlaces = places
+                final input = textEditingValue.text.toLowerCase();
+
+                final startsWithMatches = places
                     .map((place) => place['name']!)
-                    .where((name) => name
-                        .toLowerCase()
-                        .contains(textEditingValue.text.toLowerCase()))
+                    .where((name) => name.toLowerCase().startsWith(input))
                     .toList();
+
+                final containsMatches = places
+                    .map((place) => place['name']!)
+                    .where((name) =>
+                        !name.toLowerCase().startsWith(input) &&
+                        name.toLowerCase().contains(input))
+                    .toList();
+
+                final filteredPlaces = [
+                  ...startsWithMatches,
+                  ...containsMatches
+                ];
 
                 print('Filtered places: $filteredPlaces');
                 return filteredPlaces;

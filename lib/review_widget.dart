@@ -9,6 +9,11 @@ import 'database.dart';
 import 'profile_screen.dart';
 import 'report_service.dart';
 import 'view_Place.dart';
+import 'package:localize/main.dart';
+import 'dart:async';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:collection/collection.dart';
 
 class Review_widget extends StatefulWidget {
   final String? place_Id;
@@ -26,41 +31,45 @@ class _Review_widgetState extends State<Review_widget> {
   final ReportService _reportService = ReportService();
   final FirestoreService _firestoreService = FirestoreService();
   Map<String, bool> bookmarkedReviews = {};
+  // List<String> userInterests = [];
+  List<Map<String, dynamic>> recommendedReviews = [];
 
-@override
-void initState() {
-  super.initState();
-  _loadUserData();
-  _loadBookmarks();
-  FirebaseFirestore.instance.collection('Review').get().then((snapshot) {
-  if (snapshot.docs.isEmpty) {
-    print("No reviews found in Firestore.");
-  } else {
-    print("Reviews found: ${snapshot.docs.length}");
-  }
-});
-}
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _loadBookmarks();
+    _fetchRecommendedReviews();
 
-Future<void> _loadBookmarks() async {
-  if (active_userid == null) return;
-
-  final snapshot = await FirebaseFirestore.instance
-      .collection('bookmarks')
-      .doc(active_userid)
-      .collection('reviews')
-      .get();
-
-  Map<String, bool> tempBookmarks = {};
-  for (var doc in snapshot.docs) {
-    tempBookmarks[doc.id] = true;
+    FirebaseFirestore.instance.collection('Review').get().then((snapshot) {
+      if (snapshot.docs.isEmpty) {
+        print("No reviews found in Firestore.");
+      } else {
+        print("Reviews found: ${snapshot.docs.length}");
+      }
+    });
   }
 
-  if (!mounted) return; 
+  Future<void> _loadBookmarks() async {
+    if (active_userid == null) return;
 
-  setState(() {
-    bookmarkedReviews = tempBookmarks;
-  });
-}
+    final snapshot = await FirebaseFirestore.instance
+        .collection('bookmarks')
+        .doc(active_userid)
+        .collection('reviews')
+        .get();
+
+    Map<String, bool> tempBookmarks = {};
+    for (var doc in snapshot.docs) {
+      tempBookmarks[doc.id] = true;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      bookmarkedReviews = tempBookmarks;
+    });
+  }
 
   Future<void> _loadUserData() async {
     try {
@@ -75,58 +84,62 @@ Future<void> _loadBookmarks() async {
     }
   }
 
-Future<void> toggleBookmark(String reviewId) async {
-  if (active_userid == null) return;
+  Future<void> toggleBookmark(String reviewId) async {
+    if (active_userid == null) return;
 
-  final reviewRef = FirebaseFirestore.instance
-      .collection('bookmarks')
-      .doc(active_userid)
-      .collection('reviews')
-      .doc(reviewId);
+    final reviewRef = FirebaseFirestore.instance
+        .collection('bookmarks')
+        .doc(active_userid)
+        .collection('reviews')
+        .doc(reviewId);
 
-  final reviewDoc = await FirebaseFirestore.instance
-      .collection('Review')
-      .doc(reviewId)
-      .get();
+    final reviewDoc = await FirebaseFirestore.instance
+        .collection('Review')
+        .doc(reviewId)
+        .get();
 
-  if (!reviewDoc.exists) {
-    print('Review does not exist');
-    return;
+    if (!reviewDoc.exists) {
+      print('Review does not exist');
+      return;
+    }
+
+    final doc = await reviewRef.get();
+
+    if (!mounted) return;
+
+    if (doc.exists) {
+      await reviewRef.delete();
+      setState(() {
+        bookmarkedReviews[reviewId] = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Review unbookmarked'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 50, left: 20, right: 20),
+        ),
+      );
+    } else {
+      final bookmarkData = {
+        'bookmark_id': reviewId,
+        'user_uid': active_userid,
+        'bookmark_date': FieldValue.serverTimestamp(),
+        'bookmark_type': 'review',
+      };
+
+      await reviewRef.set(bookmarkData);
+      setState(() {
+        bookmarkedReviews[reviewId] = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Review bookmarked'),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(top: 50, left: 20, right: 20),
+        ),
+      );
+    }
   }
-
-  final doc = await reviewRef.get();
-
-  if (!mounted) return;  
-
-  if (doc.exists) {
-    await reviewRef.delete();
-    setState(() {
-      bookmarkedReviews[reviewId] = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Review unbookmarked'),
-          behavior: SnackBarBehavior.floating, 
-          margin: EdgeInsets.only(top: 50, left: 20, right: 20),),
-    );
-  } else {
-    final bookmarkData = {
-      'bookmark_id': reviewId,
-      'user_uid': active_userid,
-      'bookmark_date': FieldValue.serverTimestamp(),
-      'bookmark_type': 'review',
-    };
-
-    await reviewRef.set(bookmarkData);
-    setState(() {
-      bookmarkedReviews[reviewId] = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Review bookmarked'),
-          behavior: SnackBarBehavior.floating, 
-          margin: EdgeInsets.only(top: 50, left: 20, right: 20),),
-    );
-  }
-}
 
   Future<void> deleteReview(String reviewId) async {
     try {
@@ -134,16 +147,17 @@ Future<void> toggleBookmark(String reviewId) async {
           .collection('Review')
           .doc(reviewId)
           .delete();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Review deleted"),
-          behavior: SnackBarBehavior.floating, 
-          margin: EdgeInsets.only(top: 50, left: 20, right: 20),
-          ));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Review deleted"),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(top: 50, left: 20, right: 20),
+      ));
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Failed to delete review"),
-          behavior: SnackBarBehavior.floating, 
-          margin: EdgeInsets.only(top: 50, left: 20, right: 20),));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Failed to delete review"),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(top: 50, left: 20, right: 20),
+      ));
     }
   }
 
@@ -177,19 +191,74 @@ Future<void> toggleBookmark(String reviewId) async {
     );
   }
 
+//////////////////
+
+  Future<void> _fetchRecommendedReviews() async {
+    try {
+      List<Map<String, dynamic>> _reviews = await sendUserIdToServer();
+
+      debugPrint("✅ Retrieved data from the server: $_reviews");
+
+      if (!mounted) return;
+      setState(() {
+        recommendedReviews = _reviews;
+      });
+    } catch (e) {
+      debugPrint("❌ Error while fetching recommendations: $e");
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> sendUserIdToServer() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return [];
+
+      final url = Uri.parse('http://192.168.100.21:5000/api/recommendReviews');
+      final response = await http
+          .post(
+        url,
+        headers: {"Content-Type": "application/json", "Connection": "close"},
+        body: jsonEncode({"userId": user.uid}),
+      )
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        throw TimeoutException("⏳ Server did not respond in time.");
+      });
+
+      debugPrint("📥 Server response: ${response.statusCode}");
+      debugPrint("📤 Raw response body: ${response.body}");
+
+      try {
+        final data = jsonDecode(response.body);
+        print(data);
+        if (data is! Map || !data.containsKey('recommendations')) {
+          debugPrint("⚠️ Invalid JSON format");
+          return [];
+        }
+        return List<Map<String, dynamic>>.from(data['recommendations']);
+      } catch (e) {
+        debugPrint("❌ JSON parsing error: $e");
+        return [];
+      }
+    } catch (e) {
+      debugPrint("❌ Error while connecting to the server: $e");
+      return [];
+    }
+  }
+//////////////////////////////
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: widget.userId != null
-    ? FirebaseFirestore.instance
-        .collection('Review')
-        .where('user_uid', isEqualTo: widget.userId)
-        .orderBy('Post_Date', descending: true)
-        .snapshots()
-    : FirebaseFirestore.instance
-        .collection('Review')
-        .orderBy('Post_Date', descending: true)
-        .snapshots(),
+          ? FirebaseFirestore.instance
+              .collection('Review')
+              .where('user_uid', isEqualTo: widget.userId)
+              .orderBy('Post_Date', descending: true)
+              .snapshots()
+          : FirebaseFirestore.instance
+              .collection('Review')
+              .orderBy('Post_Date', descending: true)
+              .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
@@ -206,9 +275,9 @@ Future<void> toggleBookmark(String reviewId) async {
         final filteredDocs = snapshot.data!.docs.where((doc) {
           if (widget.reviewIds != null) {
             return widget.reviewIds!.contains(doc.id);
-            }
-            return widget.place_Id == null || doc['placeId'] == widget.place_Id;
-          }).toList();
+          }
+          return widget.place_Id == null || doc['placeId'] == widget.place_Id;
+        }).toList();
 
         return ListView.separated(
           padding: EdgeInsets.symmetric(horizontal: 8),
@@ -220,13 +289,44 @@ Future<void> toggleBookmark(String reviewId) async {
             endIndent: 16,
           ),
           itemBuilder: (context, index) {
-            var doc = filteredDocs[index];
-            String review_id = doc.id;
-            String reviewText = doc['Review_Text'];
-            String placeId = doc['placeId'];
-            String userUid = doc['user_uid'];
-            int rating = doc['Rating'];
-            List? likeCount = doc['Like_count'];
+            String review_id;
+            String reviewText;
+            String placeId;
+            String userUid;
+            int rating;
+            List? likeCount;
+
+            if (recommendedReviews.isEmpty) {
+              var doc = filteredDocs[index];
+              review_id = doc.id;
+              reviewText = doc['Review_Text'];
+              placeId = doc['placeId'];
+              userUid = doc['user_uid'];
+              rating = doc['Rating'];
+              likeCount = doc['Like_count'];
+            } else {
+              var doc = recommendedReviews[index];
+              review_id = doc['id'];
+
+              // Find the corresponding document in filteredDocs
+              var matchingDoc =
+                  filteredDocs.firstWhereOrNull((d) => d.id == review_id);
+
+              if (matchingDoc != null) {
+                reviewText = matchingDoc['Review_Text'];
+                placeId = matchingDoc['placeId'];
+                userUid = matchingDoc['user_uid'];
+                rating = matchingDoc['Rating'];
+                likeCount = matchingDoc['Like_count'];
+              } else {
+                // Handle the case where no matching document is found
+                reviewText = doc['Review_Text'];
+                placeId = doc['placeId'];
+                userUid = doc['user_uid'];
+                rating = doc['Rating'];
+                likeCount = doc['Like_count'];
+              }
+            }
 
             return FutureBuilder(
               future: Future.wait([
@@ -253,12 +353,14 @@ Future<void> toggleBookmark(String reviewId) async {
                   final profileImageUrl = (userDoc.data()
                           as Map<String, dynamic>?)?['profileImageUrl'] ??
                       'images/default_profile.png';
-final placeDoc = asyncSnapshot.data![1];
+                  final placeDoc = asyncSnapshot.data![1];
 
-final placeName = placeDoc.exists && placeDoc.data() != null
-    ? (placeDoc.data() as Map<String, dynamic>)['place_name'] ?? 'Unknown Place'
-    : 'Unknown Place';
-                      final userData = userDoc.data() as Map<String, dynamic>?;
+                  final placeName = placeDoc.exists && placeDoc.data() != null
+                      ? (placeDoc.data()
+                              as Map<String, dynamic>)['place_name'] ??
+                          'Unknown Place'
+                      : 'Unknown Place';
+                  final userData = userDoc.data() as Map<String, dynamic>?;
                   final _isLocalGuide = userData != null &&
                       userData.containsKey('local_guide') &&
                       userData['local_guide'] == 'yes';
@@ -284,16 +386,19 @@ final placeName = placeDoc.exists && placeDoc.data() != null
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          ProfileScreen(userId: userDoc.id)
-                                    ),
+                                        builder: (context) =>
+                                            ProfileScreen(userId: userDoc.id)),
                                   );
                                 },
                                 child: CircleAvatar(
                                   backgroundImage:
-                                        (Uri.tryParse(profileImageUrl)?.isAbsolute == true
-              ? NetworkImage(profileImageUrl) as ImageProvider<Object>
-              : AssetImage(profileImageUrl) as ImageProvider<Object>),
+                                      (Uri.tryParse(profileImageUrl)
+                                                  ?.isAbsolute ==
+                                              true
+                                          ? NetworkImage(profileImageUrl)
+                                              as ImageProvider<Object>
+                                          : AssetImage(profileImageUrl)
+                                              as ImageProvider<Object>),
                                   radius: 24,
                                 ),
                               ),
@@ -304,53 +409,54 @@ final placeName = placeDoc.exists && placeDoc.data() != null
                                   Row(
                                     children: [
                                       GestureDetector(
-                                        onTap: () {
-                                          if (userUid == active_userid) {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    ProfileScreen(
-                                                        userId: FirebaseAuth
-                                                            .instance
-                                                            .currentUser!
-                                                            .uid),
+                                          onTap: () {
+                                            if (userUid == active_userid) {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      ProfileScreen(
+                                                          userId: FirebaseAuth
+                                                              .instance
+                                                              .currentUser!
+                                                              .uid),
+                                                ),
+                                              );
+                                            } else {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        ProfileScreen(
+                                                            userId:
+                                                                userDoc.id)),
+                                              );
+                                            }
+                                          },
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                '$Name ',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                  color: Colors.black,
+                                                ),
                                               ),
-                                            );
-                                          } else {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    ProfileScreen(userId: userDoc.id)
-                                              ),
-                                            );
-                                          }
-                                        },
-                                        child: Row(children: [ 
-                                        Text(
-                                          '$Name ',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                        if (_isLocalGuide) ...[
-                                          SizedBox(width: 4),
-                                          Icon(
-                                            Icons.check_circle,
-                                            color: Colors.green,
-                                            size: 16,
-                                            ),
+                                              if (_isLocalGuide) ...[
+                                                SizedBox(width: 4),
+                                                Icon(
+                                                  Icons.check_circle,
+                                                  color: Colors.green,
+                                                  size: 16,
+                                                ),
+                                              ],
                                             ],
-                                        ],
-                                      )
-                                    ),
-                                  ],
+                                          )),
+                                    ],
                                   ),
-                                   Row(
-                                     children: [ 
+                                  Row(
+                                    children: [
                                       Text(
                                         'reviewed',
                                         style: TextStyle(
@@ -384,46 +490,50 @@ final placeName = placeDoc.exists && placeDoc.data() != null
                                   Row(
                                     children: [
                                       Text(
-                                        userData != null && userData.containsKey('city') ? 
-                                        'Based in ${userData['city']}' : 
-                                        'Based in ?',
-                                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                                        ),
-                                      ],
-                                    ),
+                                        userData != null &&
+                                                userData.containsKey('city')
+                                            ? 'Based in ${userData['city']}'
+                                            : 'Based in ?',
+                                        style: TextStyle(
+                                            fontSize: 14, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
                                   SizedBox(height: 4),
                                 ],
                               ),
                               Spacer(),
-                          PopupMenuButton<String>(
-                            icon: Icon(Icons.more_vert, color: Colors.black),
-                            onSelected: (value) {
-                              if (value == 'delete') {
-                                if (userUid == active_userid) {
-                                  _showDeleteConfirmationDialog(review_id);
-                                }
-                              } else if (value == 'report') {
-                                _reportService.navigateToReportScreen(context, review_id, 'Review');
-                              }
-                            },
-                            itemBuilder: (BuildContext context) {
-                              return [
-                                if (userUid == active_userid)
-                                  PopupMenuItem<String>(
-                                    value: 'delete',
-                                    child: Text(
-                                      'Delete Review',
-                                      style: TextStyle(color: Colors.red),
-                                    ),
-                                  ),
-                                if (userUid != active_userid) 
-                                  PopupMenuItem<String>(
-                                    value: 'report',
-                                    child: Text('Report'),
-                                  ),                                
-                              ];
-                            },
-                          ),
+                              PopupMenuButton<String>(
+                                icon:
+                                    Icon(Icons.more_vert, color: Colors.black),
+                                onSelected: (value) {
+                                  if (value == 'delete') {
+                                    if (userUid == active_userid) {
+                                      _showDeleteConfirmationDialog(review_id);
+                                    }
+                                  } else if (value == 'report') {
+                                    _reportService.navigateToReportScreen(
+                                        context, review_id, 'Review');
+                                  }
+                                },
+                                itemBuilder: (BuildContext context) {
+                                  return [
+                                    if (userUid == active_userid)
+                                      PopupMenuItem<String>(
+                                        value: 'delete',
+                                        child: Text(
+                                          'Delete Review',
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    if (userUid != active_userid)
+                                      PopupMenuItem<String>(
+                                        value: 'report',
+                                        child: Text('Report'),
+                                      ),
+                                  ];
+                                },
+                              ),
                             ],
                           ),
                           SizedBox(height: 16),
@@ -456,12 +566,13 @@ final placeName = placeDoc.exists && placeDoc.data() != null
                                   isBookmarked
                                       ? Icons.bookmark
                                       : Icons.bookmark_border,
-                                  color:
-                                      isBookmarked ? Color(0xFF800020) : Colors.grey,
+                                  color: isBookmarked
+                                      ? Color(0xFF800020)
+                                      : Colors.grey,
                                 ),
                                 onPressed: () async {
-                                  await toggleBookmark(review_id); 
-                                 },
+                                  await toggleBookmark(review_id);
+                                },
                               )
                             ],
                           ),

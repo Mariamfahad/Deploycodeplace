@@ -18,91 +18,78 @@ class MessageListScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('chats')
             .where('participants', arrayContains: currentUserId)
-                .orderBy('timestamp', descending: true) 
-
+            .orderBy('timestamp', descending: true)
             .snapshots(),
         builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
           if (!snapshot.hasData) {
             return Center(child: CircularProgressIndicator());
           }
-          if (snapshot.data!.docs.isEmpty) {
+
+          final chats = snapshot.data!.docs;
+          if (chats.isEmpty) {
             return Center(child: Text('No conversations'));
           }
+
           return ListView(
-            children: snapshot.data!.docs.map((doc) {
-              Map<String, dynamic> chatData =
-                  doc.data() as Map<String, dynamic>;
-              String otherUserId = (chatData['participants'] as List)
-                  .firstWhere((id) => id != currentUserId);
-              String decoders =
-                  AESHelper.decryptMessage(chatData['lastMessage']);
-              String lastMessage = decoders;
-              Timestamp timestamp = chatData['timestamp'] ?? Timestamp.now();
+            children: chats.map((doc) {
+              final chatData = doc.data() as Map<String, dynamic>;
+              final participants = chatData['participants'] as List;
+              final otherUserId =
+                  participants.firstWhere((id) => id != currentUserId);
 
-              int unreadCount = 0;
-              if (chatData['unreadCount'] is Map) {
-                unreadCount = chatData['unreadCount'][currentUserId] ?? 0;
-              } else {
-                unreadCount =
-                    0;
-              }
+              final rawLastMessage = chatData['lastMessage'] ?? '';
+              final lastMessage = rawLastMessage.isNotEmpty
+                  ? AESHelper.decryptMessage(rawLastMessage)
+                  : '';
 
-              return FutureBuilder(
+              final unreadMap = chatData['unreadCount'] ?? {};
+              final unreadCount = unreadMap[currentUserId] ?? 0;
+
+              return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance
                     .collection('users')
                     .doc(otherUserId)
                     .get(),
-                builder:
-                    (context, AsyncSnapshot<DocumentSnapshot> userSnapshot) {
+                builder: (context, userSnapshot) {
                   if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
                     return ListTile(
                       leading: CircleAvatar(child: Icon(Icons.person)),
                       title: Text('Unknown'),
                       subtitle: Text(lastMessage),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => MessageScreen(
-                              currentUserId: currentUserId,
-                              otherUserId: otherUserId,
-                            ),
-                          ),
-                        );
-                      },
                     );
                   }
 
-                  String otherUsername =
+                  final otherUsername =
                       userSnapshot.data!['user_name'] ?? 'Unknown';
 
                   return ListTile(
-                    leading: CircleAvatar(child: Icon(Icons.person)),
+                    leading: CircleAvatar(
+                      radius: 24,
+                      backgroundColor: Colors.pink.shade100,
+                      child: Icon(Icons.person, color: Colors.brown),
+                    ),
                     title: Text(otherUsername),
                     subtitle: Text(lastMessage),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '${timestamp.toDate().hour}:${timestamp.toDate().minute}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        if (unreadCount > 0)
-                          Container(
-                            margin: EdgeInsets.only(top: 5),
+                    trailing: unreadCount > 0
+                        ? Container(
                             padding: EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: Colors.red,
-                              borderRadius: BorderRadius.circular(12),
+                              shape: BoxShape.circle,
                             ),
+                            constraints:
+                                BoxConstraints(minWidth: 20, minHeight: 20),
                             child: Text(
                               '$unreadCount',
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                      ],
-                    ),
+                          )
+                        : SizedBox(), // لو مافي رسائل غير مقروءة، ما يظهر شيء
                     onTap: () {
                       Navigator.push(
                         context,
@@ -113,15 +100,6 @@ class MessageListScreen extends StatelessWidget {
                           ),
                         ),
                       );
-
-                      if (currentUserId == otherUserId) {
-                        FirebaseFirestore.instance
-                            .collection('chats')
-                            .doc(doc.id)
-                            .update({
-                          'unreadCount': 0,
-                        });
-                      }
                     },
                   );
                 },

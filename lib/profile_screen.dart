@@ -16,7 +16,8 @@ class ProfileScreen extends StatefulWidget {
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -36,7 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _isCurrentUser = widget.userId == _auth.currentUser?.uid;
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: _isCurrentUser ? 2 : 1, vsync: this);
     _loadUserProfile();
   }
 
@@ -134,7 +135,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               icon: Icon(Icons.more_vert),
               onSelected: (value) {
                 if (value == 'report') {
-                  ReportService().navigateToReportScreen(context, widget.userId, 'User');
+                  ReportService()
+                      .navigateToReportScreen(context, widget.userId, 'User');
                 }
               },
               itemBuilder: (BuildContext context) => [
@@ -241,25 +243,26 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               unselectedLabelColor: Colors.black,
               indicatorColor: const Color(0xFF800020),
               indicatorWeight: 3,
-              tabs: [
-                Tab(text: 'Reviews'),
-                Tab(text: 'Bookmarks'),
-              ],
+              tabs: _isCurrentUser
+                  ? [
+                      Tab(text: 'Reviews'),
+                      Tab(text: 'Bookmarks'),
+                    ]
+                  : [
+                      Tab(text: 'Reviews'),
+                    ],
             ),
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                children: [
-                  _buildReviewsList(),
-                  _isCurrentUser
-                      ? _buildBookmarksSection()
-                      : Center(
-                          child: Text(
-                            "Bookmarks are private.",
-                            style: TextStyle(fontSize: 16, color: Colors.grey),
-                          ),
-                        ),
-                ],
+                children: _isCurrentUser
+                    ? [
+                        _buildReviewsList(),
+                        _buildBookmarksSection(),
+                      ]
+                    : [
+                        _buildReviewsList(),
+                      ],
               ),
             ),
           ],

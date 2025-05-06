@@ -27,19 +27,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     'Restaurants': [],
     'Parks': [],
     'Shopping': [],
-    'Edutainment': [], // Corrected from 'Children'
+    'Edutainment': [],
   };
 
   List<String> selectedInterests = [];
 
   List<String> restaurantTypes = [
-    'Seafood restaurants',
-    'Vegan restaurants',
-    'Indian restaurants',
-    'Italian restaurants',
-    'Lebanese Restaurants',
-    'Traditional Saudi restaurants',
-    'Fast food'
+    "Hong Restaurant",
+    "Indian Restaurant",
+    "Seafood Restaurant",
+    "Italian Restaurant",
+    "Lebanese Restaurant",
+    "Pizza Restaurant",
+    "Korean Restaurant",
+    "Sushi Restaurant",
+    "Hamburger Restaurant",
+    "French Restaurant",
+    "Grill Restaurant",
   ];
 
   List<String> parkTypes = [
@@ -49,20 +53,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   ];
 
   List<String> shoppingTypes = [
-    'Traditional Markets',
-    'Modern Markets',
-    'Food Markets',
-    'Clothing Markets',
-    'Perfume Markets',
-    'Jewelry Markets',
-    'Electronics Markets',
-    'Pet Markets',
-    'Gift and Souvenir Markets',
-    'Home Goods Markets',
+    'Clothing store ',
+    'Shoes store',
+    'Furniture store',
+    'Electronics store',
+    'Cosmetics store',
+    'Pet store',
+    'Jewellery store',
   ];
 
   List<String> edutainmentTypes = [
-    'Martial art club', // Corrected here
+    'artial art club',
     'Horse academy',
     'Swimming academy',
     'Pottery classes',
@@ -70,7 +71,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     'Yoga studio',
     'Art studio',
   ];
-
   bool _hasChanges = false;
 
   @override
